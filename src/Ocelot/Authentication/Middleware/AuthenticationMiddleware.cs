@@ -2,10 +2,10 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Ocelot.Authentication.Handler.Factory;
 using Ocelot.Configuration;
 using Ocelot.Errors;
+using Ocelot.Infrastructure.Extensions;
 using Ocelot.Infrastructure.RequestData;
 using Ocelot.Logging;
 using Ocelot.Middleware;
@@ -34,47 +34,45 @@ namespace Ocelot.Authentication.Middleware
 
         public async Task Invoke(HttpContext context)
         {
-            _logger.LogDebug("started authentication");
-
             if (IsAuthenticatedRoute(DownstreamRoute.ReRoute))
             {
+                _logger.LogDebug($"{context.Request.Path} is an authenticated route. {MiddlewareName} checking if client is authenticated");
+
                 var authenticationHandler = _authHandlerFactory.Get(_app, DownstreamRoute.ReRoute.AuthenticationOptions);
 
-                if (!authenticationHandler.IsError)
+                if (authenticationHandler.IsError)
                 {
-                    _logger.LogDebug("calling authentication handler for ReRoute");
-
-                    await authenticationHandler.Data.Handler.Handle(context);
-                }
-                else
-                {
-                    _logger.LogDebug("there was an error getting authentication handler for ReRoute");
-
+                    _logger.LogError($"Error getting authentication handler for {context.Request.Path}. {authenticationHandler.Errors.ToErrorString()}");
                     SetPipelineError(authenticationHandler.Errors);
+                    return;
                 }
+
+                await authenticationHandler.Data.Handler.Handle(context);
+
 
                 if (context.User.Identity.IsAuthenticated)
                 {
-                    _logger.LogDebug("the user was authenticated");
-
+                    _logger.LogDebug($"Client has been authenticated for {context.Request.Path}");
                     await _next.Invoke(context);
-
-                    _logger.LogDebug("succesfully called next middleware");
                 }
                 else
                 {
-                    _logger.LogDebug("the user was not authenticated");
+                    var error = new List<Error>
+                    {
+                        new UnauthenticatedError(
+                            $"Request for authenticated route {context.Request.Path} by {context.User.Identity.Name} was unauthenticated")
+                    };
 
-                    SetPipelineError(new List<Error> { new UnauthenticatedError($"Request for authenticated route {context.Request.Path} by {context.User.Identity.Name} was unauthenticated") });
+                    _logger.LogError($"Client has NOT been authenticated for {context.Request.Path} and pipeline error set. {error.ToErrorString()}");
+                    SetPipelineError(error);
+                    return;
                 }
             }
             else
             {
-                _logger.LogDebug("calling next middleware");
+                _logger.LogTrace($"No authentication needed for {context.Request.Path}");
 
                 await _next.Invoke(context);
-
-                _logger.LogDebug("succesfully called next middleware");
             }
         }
 
@@ -84,3 +82,4 @@ namespace Ocelot.Authentication.Middleware
         }
     }
 }
+

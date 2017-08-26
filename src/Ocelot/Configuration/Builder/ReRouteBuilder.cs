@@ -1,23 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Net.Http;
 using Ocelot.Values;
+using System.Linq;
 
 namespace Ocelot.Configuration.Builder
 {
     public class ReRouteBuilder
     {
+        private AuthenticationOptions _authenticationOptions;
         private string _loadBalancerKey;
         private string _downstreamPathTemplate;
         private string _upstreamTemplate;
         private string _upstreamTemplatePattern;
-        private string _upstreamHttpMethod;
+        private List<HttpMethod> _upstreamHttpMethod;
         private bool _isAuthenticated;
-        private string _authenticationProvider;
-        private string _authenticationProviderUrl;
-        private string _scopeName;
-        private List<string> _additionalScopes;
-        private bool _requireHttps;
-        private string _scopeSecret;
         private List<ClaimToThing> _configHeaderExtractorProperties;
         private List<ClaimToThing> _claimToClaims;
         private Dictionary<string, string> _routeClaimRequirement;
@@ -26,25 +22,19 @@ namespace Ocelot.Configuration.Builder
         private string _requestIdHeaderKey;
         private bool _isCached;
         private CacheOptions _fileCacheOptions;
-        private bool _useServiceDiscovery;
-        private string _serviceName;
-        private string _serviceDiscoveryProvider;
-        private string _serviceDiscoveryAddress;
         private string _downstreamScheme;
         private string _downstreamHost;
-        private int _dsPort;
+        private int _downstreamPort;
         private string _loadBalancer;
-        private string _serviceProviderHost;
-        private int _serviceProviderPort;
-
-        public ReRouteBuilder()
-        {
-            _additionalScopes = new List<string>();
-        }
+        private ServiceProviderConfiguration _serviceProviderConfiguraion;
+        private bool _useQos;
+        private QoSOptions _qosOptions;
+        public bool _enableRateLimiting;
+        public RateLimitOptions _rateLimitOptions;
 
         public ReRouteBuilder WithLoadBalancer(string loadBalancer)
         {
-            _loadBalancer = loadBalancer;
+          _loadBalancer = loadBalancer;
             return this;
         }
 
@@ -60,37 +50,13 @@ namespace Ocelot.Configuration.Builder
             return this;
         }
 
-        public ReRouteBuilder WithServiceDiscoveryAddress(string serviceDiscoveryAddress)
-        {
-            _serviceDiscoveryAddress = serviceDiscoveryAddress;
-            return this;
-        }
-
-        public ReRouteBuilder WithServiceDiscoveryProvider(string serviceDiscoveryProvider)
-        {
-            _serviceDiscoveryProvider = serviceDiscoveryProvider;
-            return this;
-        }
-
-        public ReRouteBuilder WithServiceName(string serviceName)
-        {
-            _serviceName = serviceName;
-            return this;
-        }
-
-        public ReRouteBuilder WithUseServiceDiscovery(bool useServiceDiscovery)
-        {
-            _useServiceDiscovery = useServiceDiscovery;
-            return this;
-        }
-
         public ReRouteBuilder WithDownstreamPathTemplate(string input)
         {
             _downstreamPathTemplate = input;
             return this;
         }
 
-        public ReRouteBuilder WithUpstreamTemplate(string input)
+        public ReRouteBuilder WithUpstreamPathTemplate(string input)
         {
             _upstreamTemplate = input;
             return this;
@@ -101,11 +67,13 @@ namespace Ocelot.Configuration.Builder
             _upstreamTemplatePattern = input;
             return this;
         }
-        public ReRouteBuilder WithUpstreamHttpMethod(string input)
+
+        public ReRouteBuilder WithUpstreamHttpMethod(List<string> input)
         {
-            _upstreamHttpMethod = input;
+            _upstreamHttpMethod = (input.Count == 0) ? new List<HttpMethod>() : input.Select(x => new HttpMethod(x.Trim())).ToList();
             return this;
         }
+
         public ReRouteBuilder WithIsAuthenticated(bool input)
         {
             _isAuthenticated = input;
@@ -115,42 +83,6 @@ namespace Ocelot.Configuration.Builder
         public ReRouteBuilder WithIsAuthorised(bool input)
         {
             _isAuthorised = input;
-            return this;
-        }
-
-        public ReRouteBuilder WithAuthenticationProvider(string input)
-        {
-            _authenticationProvider = input;
-            return this;
-        }
-
-        public ReRouteBuilder WithAuthenticationProviderUrl(string input)
-        {
-            _authenticationProviderUrl = input;
-            return this;
-        }
-
-        public ReRouteBuilder WithAuthenticationProviderScopeName(string input)
-        {
-            _scopeName = input;
-            return this;
-        }
-
-        public ReRouteBuilder WithAuthenticationProviderAdditionalScopes(List<string> input)
-        {
-            _additionalScopes = input;
-            return this;
-        }
-
-        public ReRouteBuilder WithRequireHttps(bool input)
-        {
-            _requireHttps = input;
-            return this;
-        }
-
-        public ReRouteBuilder WithScopeSecret(string input)
-        {
-            _scopeSecret = input;
             return this;
         }
 
@@ -198,35 +130,80 @@ namespace Ocelot.Configuration.Builder
 
         public ReRouteBuilder WithDownstreamPort(int port)
         {
-            _dsPort = port;
+            _downstreamPort = port;
             return this;
         }
 
+        public ReRouteBuilder WithIsQos(bool input)
+        {
+            _useQos = input;
+            return this;
+        }
+
+        public ReRouteBuilder WithQosOptions(QoSOptions input)
+        {
+            _qosOptions = input;
+            return this;
+        }
+       
         public ReRouteBuilder WithLoadBalancerKey(string loadBalancerKey)
         {
             _loadBalancerKey = loadBalancerKey;
             return this;
         }
 
-        public ReRouteBuilder WithServiceProviderHost(string serviceProviderHost)
+        public ReRouteBuilder WithServiceProviderConfiguraion(ServiceProviderConfiguration serviceProviderConfiguraion)
         {
-            _serviceProviderHost = serviceProviderHost;
+            _serviceProviderConfiguraion = serviceProviderConfiguraion;
             return this;
         }
 
-        public ReRouteBuilder WithServiceProviderPort(int serviceProviderPort)
+        public ReRouteBuilder WithAuthenticationOptions(AuthenticationOptions authenticationOptions)
         {
-            _serviceProviderPort = serviceProviderPort;
+            _authenticationOptions = authenticationOptions;
             return this;
         }
+
+        public ReRouteBuilder WithEnableRateLimiting(bool input)
+        {
+            _enableRateLimiting = input;
+            return this;
+        }
+
+        public ReRouteBuilder WithRateLimitOptions(RateLimitOptions input)
+        {
+            _rateLimitOptions = input;
+            return this;
+        }
+
 
         public ReRoute Build()
         {
-            return new ReRoute(new DownstreamPathTemplate(_downstreamPathTemplate), _upstreamTemplate, _upstreamHttpMethod, _upstreamTemplatePattern, 
-                _isAuthenticated, new AuthenticationOptions(_authenticationProvider, _authenticationProviderUrl, _scopeName, 
-                _requireHttps, _additionalScopes, _scopeSecret), _configHeaderExtractorProperties, _claimToClaims, _routeClaimRequirement, 
-                _isAuthorised, _claimToQueries, _requestIdHeaderKey, _isCached, _fileCacheOptions, _downstreamScheme, _loadBalancer,
-                _downstreamHost, _dsPort, _loadBalancerKey, new ServiceProviderConfiguraion(_serviceName, _downstreamHost, _dsPort, _useServiceDiscovery, _serviceDiscoveryProvider, _serviceProviderHost, _serviceProviderPort));
+            return new ReRoute(
+                new PathTemplate(_downstreamPathTemplate), 
+                new PathTemplate(_upstreamTemplate), 
+                _upstreamHttpMethod, 
+                _upstreamTemplatePattern, 
+                _isAuthenticated, 
+                _authenticationOptions,
+                _configHeaderExtractorProperties, 
+                _claimToClaims, 
+                _routeClaimRequirement, 
+                _isAuthorised, 
+                _claimToQueries, 
+                _requestIdHeaderKey, 
+                _isCached, 
+                _fileCacheOptions, 
+                _downstreamScheme, 
+                _loadBalancer,
+                _downstreamHost, 
+                _downstreamPort, 
+                _loadBalancerKey, 
+                _serviceProviderConfiguraion, 
+                _useQos, 
+                _qosOptions,
+                _enableRateLimiting,
+                _rateLimitOptions);
         }
     }
 }

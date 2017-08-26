@@ -1,13 +1,14 @@
 ﻿using System;
-using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Ocelot.Infrastructure.RequestData;
 using Ocelot.Logging;
 
 namespace Ocelot.Errors.Middleware
 {
+    /// <summary>
+    /// Catches all unhandled exceptions thrown by middleware, logs and returns a 500
+    /// </summary>
     public class ExceptionHandlerMiddleware 
     {
         private readonly RequestDelegate _next;

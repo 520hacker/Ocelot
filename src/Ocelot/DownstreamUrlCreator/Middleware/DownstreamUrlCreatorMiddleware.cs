@@ -1,12 +1,10 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using Ocelot.Configuration;
 using Ocelot.DownstreamUrlCreator.UrlTemplateReplacer;
 using Ocelot.Infrastructure.RequestData;
 using Ocelot.Logging;
 using Ocelot.Middleware;
-using Ocelot.Values;
+using System;
 
 namespace Ocelot.DownstreamUrlCreator.Middleware
 {
@@ -32,8 +30,6 @@ namespace Ocelot.DownstreamUrlCreator.Middleware
 
         public async Task Invoke(HttpContext context)
         {
-            _logger.LogDebug("started calling downstream url creator middleware");
-
             var dsPath = _replacer
                 .Replace(DownstreamRoute.ReRoute.DownstreamPathTemplate, DownstreamRoute.TemplatePlaceholderNameAndValues);
 
@@ -45,29 +41,17 @@ namespace Ocelot.DownstreamUrlCreator.Middleware
                 return;
             }
 
-            var dsScheme = DownstreamRoute.ReRoute.DownstreamScheme;
-            
-            var dsHostAndPort = HostAndPort;
-
-            var dsUrl = _urlBuilder.Build(dsPath.Data.Value, dsScheme, dsHostAndPort);
-
-            if (dsUrl.IsError)
+            var uriBuilder = new UriBuilder(DownstreamRequest.RequestUri)
             {
-                _logger.LogDebug("IUrlBuilder returned an error, setting pipeline error");
+                Path = dsPath.Data.Value,
+                Scheme = DownstreamRoute.ReRoute.DownstreamScheme
+            };
 
-                SetPipelineError(dsUrl.Errors);
-                return;
-            }
+            DownstreamRequest.RequestUri = uriBuilder.Uri;
 
-            _logger.LogDebug("downstream url is {downstreamUrl.Data.Value}", dsUrl.Data.Value);
-
-            SetDownstreamUrlForThisRequest(dsUrl.Data.Value);
-
-            _logger.LogDebug("calling next middleware");
+            _logger.LogDebug("downstream url is {downstreamUrl.Data.Value}", DownstreamRequest.RequestUri);
 
             await _next.Invoke(context);
-
-            _logger.LogDebug("succesfully called next middleware");
         }
     }
 }

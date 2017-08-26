@@ -68,8 +68,8 @@ namespace Ocelot.AcceptanceTests
                         {
                             DownstreamPathTemplate = "/",
                             DownstreamScheme = "http",
-                            UpstreamTemplate = "/",
-                            UpstreamHttpMethod = "Get",
+                            UpstreamPathTemplate = "/",
+                            UpstreamHttpMethod = new List<string> { "Get" },
                             ServiceName = serviceName,
                             LoadBalancer = "LeastConnection",
                         }

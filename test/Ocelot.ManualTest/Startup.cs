@@ -38,16 +38,14 @@ namespace Ocelot.ManualTest
                 .WithDictionaryHandle();
             };
 
-            services.AddOcelotOutputCaching(settings);
-            services.AddOcelotFileConfiguration(Configuration);
-            services.AddOcelot();
+            services.AddOcelot(Configuration, settings);
         }
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
             loggerFactory.AddConsole(Configuration.GetSection("Logging"));
 
-            app.UseOcelot();
+            app.UseOcelot().Wait();
         }
     }
 }

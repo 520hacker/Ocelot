@@ -1,7 +1,6 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Ocelot.Infrastructure.RequestData;
 using Ocelot.Logging;
 using Ocelot.Middleware;
@@ -27,13 +26,11 @@ namespace Ocelot.QueryStrings.Middleware
 
         public async Task Invoke(HttpContext context)
         {
-            _logger.LogDebug("started calling query string builder middleware");
-
             if (DownstreamRoute.ReRoute.ClaimsToQueries.Any())
             {
-                _logger.LogDebug("this route has instructions to convert claims to queries");
+                _logger.LogDebug($"{DownstreamRoute.ReRoute.DownstreamPathTemplate.Value} has instructions to convert claims to queries");
 
-                var response = _addQueriesToRequest.SetQueriesOnContext(DownstreamRoute.ReRoute.ClaimsToQueries, context);
+                var response = _addQueriesToRequest.SetQueriesOnDownstreamRequest(DownstreamRoute.ReRoute.ClaimsToQueries, context.User.Claims, DownstreamRequest);
 
                 if (response.IsError)
                 {
@@ -44,11 +41,7 @@ namespace Ocelot.QueryStrings.Middleware
                 }
             }
 
-            _logger.LogDebug("calling next middleware");
-
             await _next.Invoke(context);
-
-            _logger.LogDebug("succesfully called next middleware");
         }
     }
 }

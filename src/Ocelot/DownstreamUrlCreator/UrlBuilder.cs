@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using Ocelot.Configuration;
-using Ocelot.DownstreamUrlCreator.UrlTemplateReplacer;
 using Ocelot.Errors;
 using Ocelot.Responses;
 using Ocelot.Values;
@@ -26,6 +24,7 @@ namespace Ocelot.DownstreamUrlCreator
             {
                 return new ErrorResponse<DownstreamUrl>(new List<Error> { new DownstreamHostNullOrEmptyError() });
             }
+
 
             var builder = new UriBuilder
             {

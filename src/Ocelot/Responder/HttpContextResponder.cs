@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -54,15 +55,10 @@ namespace Ocelot.Responder
 
             using (Stream stream = new MemoryStream(content))
             {
-                await stream.CopyToAsync(context.Response.Body);
-            }
-        }
-
-        private static void AddHeaderIfDoesntExist(HttpContext context, KeyValuePair<string, IEnumerable<string>> httpResponseHeader)
-        {
-            if (!context.Response.Headers.ContainsKey(httpResponseHeader.Key))
-            {
-                context.Response.Headers.Add(httpResponseHeader.Key, new StringValues(httpResponseHeader.Value.ToArray()));
+                if (response.StatusCode != HttpStatusCode.NotModified)
+                {
+                    await stream.CopyToAsync(context.Response.Body);
+                }
             }
         }
 
@@ -73,6 +69,14 @@ namespace Ocelot.Responder
                 context.Response.StatusCode = statusCode;
                 return Task.CompletedTask;
             }, context);
+        }
+
+        private static void AddHeaderIfDoesntExist(HttpContext context, KeyValuePair<string, IEnumerable<string>> httpResponseHeader)
+        {
+            if (!context.Response.Headers.ContainsKey(httpResponseHeader.Key))
+            {
+                context.Response.Headers.Add(httpResponseHeader.Key, new StringValues(httpResponseHeader.Value.ToArray()));
+            }
         }
     }
 }

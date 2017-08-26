@@ -1,28 +1,38 @@
 using System.Collections.Generic;
 using System.Linq;
 using Ocelot.Errors;
-using Ocelot.Responses;
 
 namespace Ocelot.Responder
 {
     public class ErrorsToHttpStatusCodeMapper : IErrorsToHttpStatusCodeMapper
     {
-        public Response<int> Map(List<Error> errors)
+        public int Map(List<Error> errors)
         {
             if (errors.Any(e => e.Code == OcelotErrorCode.UnauthenticatedError))
             {
-                return new OkResponse<int>(401);
+                return 401;
             }
 
             if (errors.Any(e => e.Code == OcelotErrorCode.UnauthorizedError 
                 || e.Code == OcelotErrorCode.ClaimValueNotAuthorisedError
+                || e.Code == OcelotErrorCode.ScopeNotAuthorisedError
                 || e.Code == OcelotErrorCode.UserDoesNotHaveClaimError
                 || e.Code == OcelotErrorCode.CannotFindClaimError))
             {
-                return new OkResponse<int>(403);
+                return 403;
             }
 
-            return new OkResponse<int>(404);
+            if (errors.Any(e => e.Code == OcelotErrorCode.RequestTimedOutError))
+            {
+                return 503;
+            }
+
+            if (errors.Any(e => e.Code == OcelotErrorCode.UnableToFindDownstreamRouteError))
+            {
+                return 404;
+            }
+
+            return 404;
         }
     }
 }

@@ -6,14 +6,14 @@ namespace Ocelot.Configuration.File
     {
         public FileAuthenticationOptions()
         {
-            AdditionalScopes = new List<string>();
+            AllowedScopes = new List<string>();
+            IdentityServerConfig = new FileIdentityServerConfig();
+            JwtConfig = new FileJwtConfig();
         }
 
         public string Provider { get; set; }
-        public string ProviderRootUrl { get; set; }
-        public string ScopeName { get; set; }
-        public bool RequireHttps { get; set; }
-        public List<string> AdditionalScopes { get; set; }
-        public string ScopeSecret { get; set; }
+        public List<string> AllowedScopes { get; set; }
+        public FileIdentityServerConfig IdentityServerConfig { get; set; }
+        public FileJwtConfig JwtConfig { get; set; }
     }
 }

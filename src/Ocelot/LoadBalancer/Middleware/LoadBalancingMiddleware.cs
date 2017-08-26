@@ -6,7 +6,6 @@ using Ocelot.LoadBalancer.LoadBalancers;
 using Ocelot.Logging;
 using Ocelot.Middleware;
 using Ocelot.QueryStrings.Middleware;
-using Ocelot.ServiceDiscovery;
 
 namespace Ocelot.LoadBalancer.Middleware
 {
@@ -29,41 +28,43 @@ namespace Ocelot.LoadBalancer.Middleware
 
         public async Task Invoke(HttpContext context)
         {
-            _logger.LogDebug("started calling load balancing middleware");
-
-            var loadBalancer = _loadBalancerHouse.Get(DownstreamRoute.ReRoute.LoadBalancerKey);
+            var loadBalancer = _loadBalancerHouse.Get(DownstreamRoute.ReRoute.ReRouteKey);
             if(loadBalancer.IsError)
             {
+                _logger.LogDebug("there was an error retriving the loadbalancer, setting pipeline error");
                 SetPipelineError(loadBalancer.Errors);
                 return;
             }
 
             var hostAndPort = await loadBalancer.Data.Lease();
             if(hostAndPort.IsError)
-            { 
+            {
+                _logger.LogDebug("there was an error leasing the loadbalancer, setting pipeline error");
                 SetPipelineError(hostAndPort.Errors);
                 return;
             }
 
-            SetHostAndPortForThisRequest(hostAndPort.Data);
-
-            _logger.LogDebug("calling next middleware");
+            var uriBuilder = new UriBuilder(DownstreamRequest.RequestUri);
+            uriBuilder.Host = hostAndPort.Data.DownstreamHost;
+            if (hostAndPort.Data.DownstreamPort > 0)
+            {
+                uriBuilder.Port = hostAndPort.Data.DownstreamPort;
+            }
+            DownstreamRequest.RequestUri = uriBuilder.Uri;
 
             try
             {
                 await _next.Invoke(context);
-
-                loadBalancer.Data.Release(hostAndPort.Data);
             }
             catch (Exception)
             {
-                loadBalancer.Data.Release(hostAndPort.Data);
-                 
-                 _logger.LogDebug("error calling next middleware, exception will be thrown to global handler");
+                _logger.LogDebug("Exception calling next middleware, exception will be thrown to global handler");
                 throw;
             }
-
-            _logger.LogDebug("succesfully called next middleware");
+            finally
+            {
+                loadBalancer.Data.Release(hostAndPort.Data);
+            }
         }
     }
 }

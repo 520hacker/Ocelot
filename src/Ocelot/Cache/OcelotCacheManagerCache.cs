@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using CacheManager.Core;
 
 namespace Ocelot.Cache
@@ -12,14 +14,31 @@ namespace Ocelot.Cache
             _cacheManager = cacheManager;
         }
 
-        public void Add(string key, T value, TimeSpan ttl)
+        public void Add(string key, T value, TimeSpan ttl, string region)
         {
-            _cacheManager.Add(new CacheItem<T>(key, value, ExpirationMode.Absolute, ttl));
+            _cacheManager.Add(new CacheItem<T>(key, region, value, ExpirationMode.Absolute, ttl));
         }
 
-        public T Get(string key)
+        public void AddAndDelete(string key, T value, TimeSpan ttl, string region)
         {
-            return _cacheManager.Get<T>(key);
+            var exists = _cacheManager.Get(key);
+
+            if (exists != null)
+            {
+                _cacheManager.Remove(key);
+            }
+
+            Add(key, value, ttl, region);
+        }
+
+        public T Get(string key, string region)
+        {
+            return _cacheManager.Get<T>(key, region);
+        }
+
+        public void ClearRegion(string region)
+        {
+            _cacheManager.ClearRegion(region);
         }
     }
 }

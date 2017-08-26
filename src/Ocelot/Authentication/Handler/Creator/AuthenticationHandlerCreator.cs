@@ -1,3 +1,4 @@
+using System;
 using IdentityServer4.AccessTokenValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -5,6 +6,8 @@ using Ocelot.Responses;
 
 namespace Ocelot.Authentication.Handler.Creator
 {
+    using Ocelot.Configuration;
+
     using AuthenticationOptions = Configuration.AuthenticationOptions;
 
     /// <summary>
@@ -12,19 +15,35 @@ namespace Ocelot.Authentication.Handler.Creator
     /// </summary>
     public class AuthenticationHandlerCreator : IAuthenticationHandlerCreator
     {
-        public Response<RequestDelegate> CreateIdentityServerAuthenticationHandler(IApplicationBuilder app, AuthenticationOptions authOptions)
+        public Response<RequestDelegate> Create(IApplicationBuilder app, AuthenticationOptions authOptions)
         {
             var builder = app.New();
 
-            builder.UseIdentityServerAuthentication(new IdentityServerAuthenticationOptions
+            if (authOptions.Provider.ToLower() == "jwt")
             {
-                Authority = authOptions.ProviderRootUrl,
-                ApiName = authOptions.ScopeName,
-                RequireHttpsMetadata = authOptions.RequireHttps,
-                AllowedScopes = authOptions.AdditionalScopes,
-                SupportedTokens = SupportedTokens.Both,
-                ApiSecret = authOptions.ScopeSecret
-            });
+                var authenticationConfig = authOptions.Config as JwtConfig;
+
+                builder.UseJwtBearerAuthentication(
+                    new JwtBearerOptions()
+                        {
+                            Authority = authenticationConfig.Authority,
+                            Audience = authenticationConfig.Audience
+                        });
+            }
+            else
+            {
+                var authenticationConfig = authOptions.Config as IdentityServerConfig;
+
+                builder.UseIdentityServerAuthentication(new IdentityServerAuthenticationOptions
+                {
+                    Authority = authenticationConfig.ProviderRootUrl,
+                    ApiName = authenticationConfig.ApiName,
+                    RequireHttpsMetadata = authenticationConfig.RequireHttps,
+                    AllowedScopes = authOptions.AllowedScopes,
+                    SupportedTokens = SupportedTokens.Both,
+                    ApiSecret = authenticationConfig.ApiSecret
+                });
+            }
 
             var authenticationNext = builder.Build();
 

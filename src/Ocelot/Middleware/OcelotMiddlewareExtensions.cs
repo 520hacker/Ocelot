@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
+using IdentityServer4.AccessTokenValidation;
+using Microsoft.AspNetCore.Builder;
 using Ocelot.Authentication.Middleware;
 using Ocelot.Cache.Middleware;
 using Ocelot.Claims.Middleware;
@@ -6,19 +9,26 @@ using Ocelot.DownstreamRouteFinder.Middleware;
 using Ocelot.DownstreamUrlCreator.Middleware;
 using Ocelot.Errors.Middleware;
 using Ocelot.Headers.Middleware;
+using Ocelot.Logging;
 using Ocelot.QueryStrings.Middleware;
 using Ocelot.Request.Middleware;
 using Ocelot.Requester.Middleware;
 using Ocelot.RequestId.Middleware;
 using Ocelot.Responder.Middleware;
+using Ocelot.RateLimit.Middleware;
 
 namespace Ocelot.Middleware
 {
     using System;
     using System.Threading.Tasks;
     using Authorisation.Middleware;
+    using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Http;
+    using Microsoft.Extensions.Options;
+    using Ocelot.Configuration;
+    using Ocelot.Configuration.File;
     using Ocelot.Configuration.Provider;
+    using Ocelot.Configuration.Setter;
     using Ocelot.LoadBalancer.Middleware;
 
     public static class OcelotMiddlewareExtensions
@@ -28,10 +38,10 @@ namespace Ocelot.Middleware
         /// </summary>
         /// <param name="builder"></param>
         /// <returns></returns>
-        public static IApplicationBuilder UseOcelot(this IApplicationBuilder builder)
+        public static async Task<IApplicationBuilder> UseOcelot(this IApplicationBuilder builder)
         {
-            CreateConfiguration(builder);
-            builder.UseOcelot(new OcelotMiddlewareConfiguration());
+            await builder.UseOcelot(new OcelotMiddlewareConfiguration());
+
             return builder;
         }
 
@@ -41,10 +51,12 @@ namespace Ocelot.Middleware
         /// <param name="builder"></param>
         /// <param name="middlewareConfiguration"></param>
         /// <returns></returns>
-        public static IApplicationBuilder UseOcelot(this IApplicationBuilder builder, OcelotMiddlewareConfiguration middlewareConfiguration)
+        public static async Task<IApplicationBuilder> UseOcelot(this IApplicationBuilder builder,       OcelotMiddlewareConfiguration middlewareConfiguration)
         {
-            CreateConfiguration(builder);
-            
+            await CreateAdministrationArea(builder);
+
+            ConfigureDiagnosticListener(builder);
+
             // This is registered to catch any global exceptions that are not handled
             builder.UseExceptionHandlerMiddleware();
 
@@ -54,8 +66,14 @@ namespace Ocelot.Middleware
             // This is registered first so it can catch any errors and issue an appropriate response
             builder.UseResponderMiddleware();
 
+            // Initialises downstream request
+            builder.UseDownstreamRequestInitialiser();
+
             // Then we get the downstream route information
             builder.UseDownstreamRouteFinderMiddleware();
+
+            // We check whether the request is ratelimit, and if there is no continue processing
+            builder.UseRateLimiting();
 
             // Now we can look for the requestId
             builder.UseRequestIdMiddleware();
@@ -122,18 +140,68 @@ namespace Ocelot.Middleware
             return builder;
         }
 
-        private static void CreateConfiguration(IApplicationBuilder builder)
+        private static async Task<IOcelotConfiguration> CreateConfiguration(IApplicationBuilder builder)
         {
+            var fileConfig = (IOptions<FileConfiguration>)builder.ApplicationServices.GetService(typeof(IOptions<FileConfiguration>));
+            
+            var configSetter = (IFileConfigurationSetter)builder.ApplicationServices.GetService(typeof(IFileConfigurationSetter));
+            
             var configProvider = (IOcelotConfigurationProvider)builder.ApplicationServices.GetService(typeof(IOcelotConfigurationProvider));
-            
-            var config = configProvider.Get();
-            
-            if(config == null)
+
+            var ocelotConfiguration = await configProvider.Get();
+
+            if (ocelotConfiguration == null || ocelotConfiguration.Data == null || ocelotConfiguration.IsError)
             {
-                throw new Exception("Unable to start Ocelot: configuration was null");
+                var config = await configSetter.Set(fileConfig.Value);
+
+                if (config == null || config.IsError)
+                {
+                    throw new Exception("Unable to start Ocelot: configuration was not set up correctly.");
+                }
             }
+
+            ocelotConfiguration = await configProvider.Get();
+
+            if(ocelotConfiguration == null || ocelotConfiguration.Data == null || ocelotConfiguration.IsError)
+            {
+                throw new Exception("Unable to start Ocelot: ocelot configuration was not returned by provider.");
+            }
+
+            return ocelotConfiguration.Data;
         }
 
+        private static async Task CreateAdministrationArea(IApplicationBuilder builder)
+        {
+            var configuration = await CreateConfiguration(builder);
+
+            var identityServerConfiguration = (IIdentityServerConfiguration)builder.ApplicationServices.GetService(typeof(IIdentityServerConfiguration));
+
+            if(!string.IsNullOrEmpty(configuration.AdministrationPath) && identityServerConfiguration != null)
+            {
+                var urlFinder = (IBaseUrlFinder)builder.ApplicationServices.GetService(typeof(IBaseUrlFinder));
+
+                var baseSchemeUrlAndPort = urlFinder.Find();
+                
+                builder.Map(configuration.AdministrationPath, app =>
+                {
+                    var identityServerUrl = $"{baseSchemeUrlAndPort}/{configuration.AdministrationPath.Remove(0,1)}";
+                    app.UseIdentityServerAuthentication(new IdentityServerAuthenticationOptions
+                    {
+                        Authority = identityServerUrl,
+                        ApiName = identityServerConfiguration.ApiName,
+                        RequireHttpsMetadata = identityServerConfiguration.RequireHttps,
+                        AllowedScopes = identityServerConfiguration.AllowedScopes,
+                        SupportedTokens = SupportedTokens.Both,
+                        ApiSecret = identityServerConfiguration.ApiSecret
+                    });
+
+                    app.UseIdentityServer();
+
+                    app.UseMvc();
+                });
+            }
+        }
+        
         private static void UseIfNotNull(this IApplicationBuilder builder, Func<HttpContext, Func<Task>, Task> middleware)
         {
             if (middleware != null)
@@ -141,5 +209,22 @@ namespace Ocelot.Middleware
                 builder.Use(middleware);
             }
         }
+
+        /// <summary>
+         /// Configure a DiagnosticListener to listen for diagnostic events when the middleware starts and ends
+         /// </summary>
+         /// <param name="builder"></param>
+         private static void ConfigureDiagnosticListener(IApplicationBuilder builder)
+         {
+             var env = (IHostingEnvironment)builder.ApplicationServices.GetService(typeof(IHostingEnvironment));
+
+            //https://github.com/TomPallister/Ocelot/pull/87 not sure why only for dev envs and marc disapeered so just merging and maybe change one day?
+            if (!env.IsProduction())
+             {
+                 var listener = (OcelotDiagnosticListener)builder.ApplicationServices.GetService(typeof(OcelotDiagnosticListener));
+                 var diagnosticListener = (DiagnosticListener)builder.ApplicationServices.GetService(typeof(DiagnosticListener));
+                 diagnosticListener.SubscribeWithAdapter(listener);
+             }
+         }
     }
 }
