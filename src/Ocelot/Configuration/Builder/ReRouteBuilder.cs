@@ -2,16 +2,18 @@
 using System.Net.Http;
 using Ocelot.Values;
 using System.Linq;
+using Ocelot.Configuration.Creator;
+using System;
 
 namespace Ocelot.Configuration.Builder
 {
     public class ReRouteBuilder
     {
         private AuthenticationOptions _authenticationOptions;
-        private string _loadBalancerKey;
+        private string _reRouteKey;
         private string _downstreamPathTemplate;
         private string _upstreamTemplate;
-        private string _upstreamTemplatePattern;
+        private UpstreamPathTemplate _upstreamTemplatePattern;
         private List<HttpMethod> _upstreamHttpMethod;
         private bool _isAuthenticated;
         private List<ClaimToThing> _configHeaderExtractorProperties;
@@ -23,16 +25,35 @@ namespace Ocelot.Configuration.Builder
         private bool _isCached;
         private CacheOptions _fileCacheOptions;
         private string _downstreamScheme;
-        private string _downstreamHost;
-        private int _downstreamPort;
         private string _loadBalancer;
-        private ServiceProviderConfiguration _serviceProviderConfiguraion;
         private bool _useQos;
         private QoSOptions _qosOptions;
         private HttpHandlerOptions _httpHandlerOptions;
-        public bool _enableRateLimiting;
-        public RateLimitOptions _rateLimitOptions;
-        private string _authenticationProviderKey;
+        private bool _enableRateLimiting;
+        private RateLimitOptions _rateLimitOptions;
+        private bool _useServiceDiscovery;
+        private string _serviceName;
+        private List<HeaderFindAndReplace> _upstreamHeaderFindAndReplace;
+        private List<HeaderFindAndReplace> _downstreamHeaderFindAndReplace;
+        private readonly List<DownstreamHostAndPort> _downstreamAddresses;
+        private string _upstreamHost;
+
+        public ReRouteBuilder()
+        {
+            _downstreamAddresses = new List<DownstreamHostAndPort>();
+        }
+
+        public ReRouteBuilder WithDownstreamAddresses(List<DownstreamHostAndPort> downstreamAddresses)
+        {
+            _downstreamAddresses.AddRange(downstreamAddresses);
+            return this;
+        }
+
+        public ReRouteBuilder WithUpstreamHost(string upstreamAddresses)
+        {
+            _upstreamHost = upstreamAddresses;
+            return this;
+        }
 
         public ReRouteBuilder WithLoadBalancer(string loadBalancer)
         {
@@ -43,12 +64,6 @@ namespace Ocelot.Configuration.Builder
         public ReRouteBuilder WithDownstreamScheme(string downstreamScheme)
         {
             _downstreamScheme = downstreamScheme;
-            return this;
-        }
-
-        public ReRouteBuilder WithDownstreamHost(string downstreamHost)
-        {
-            _downstreamHost = downstreamHost;
             return this;
         }
 
@@ -64,7 +79,7 @@ namespace Ocelot.Configuration.Builder
             return this;
         }
 
-        public ReRouteBuilder WithUpstreamTemplatePattern(string input)
+        public ReRouteBuilder WithUpstreamTemplatePattern(UpstreamPathTemplate input)
         {
             _upstreamTemplatePattern = input;
             return this;
@@ -130,12 +145,6 @@ namespace Ocelot.Configuration.Builder
             return this;
         }
 
-        public ReRouteBuilder WithDownstreamPort(int port)
-        {
-            _downstreamPort = port;
-            return this;
-        }
-
         public ReRouteBuilder WithIsQos(bool input)
         {
             _useQos = input;
@@ -148,15 +157,9 @@ namespace Ocelot.Configuration.Builder
             return this;
         }
        
-        public ReRouteBuilder WithLoadBalancerKey(string loadBalancerKey)
+        public ReRouteBuilder WithReRouteKey(string reRouteKey)
         {
-            _loadBalancerKey = loadBalancerKey;
-            return this;
-        }
-
-        public ReRouteBuilder WithServiceProviderConfiguraion(ServiceProviderConfiguration serviceProviderConfiguraion)
-        {
-            _serviceProviderConfiguraion = serviceProviderConfiguraion;
+            _reRouteKey = reRouteKey;
             return this;
         }
 
@@ -178,17 +181,36 @@ namespace Ocelot.Configuration.Builder
             return this;
         }
 
-        public ReRouteBuilder WithAuthenticationProviderKey(string authenticationProviderKey)
-        {
-            _authenticationProviderKey = authenticationProviderKey;
-            return this;
-        }
-
         public ReRouteBuilder WithHttpHandlerOptions(HttpHandlerOptions input)
         {
             _httpHandlerOptions = input;
             return this;
         }
+
+        public ReRouteBuilder WithUseServiceDiscovery(bool useServiceDiscovery)
+        {
+            _useServiceDiscovery = useServiceDiscovery;
+            return this;
+        }
+
+        public ReRouteBuilder WithServiceName(string serviceName)
+        {
+            _serviceName = serviceName;
+            return this;
+        }
+
+        public ReRouteBuilder WithUpstreamHeaderFindAndReplace(List<HeaderFindAndReplace> upstreamHeaderFindAndReplace)
+        {
+            _upstreamHeaderFindAndReplace = upstreamHeaderFindAndReplace;
+            return this;
+        }
+
+        public ReRouteBuilder WithDownstreamHeaderFindAndReplace(List<HeaderFindAndReplace> downstreamHeaderFindAndReplace)
+        {
+            _downstreamHeaderFindAndReplace = downstreamHeaderFindAndReplace;
+            return this;
+        }
+
 
         public ReRoute Build()
         {
@@ -209,15 +231,18 @@ namespace Ocelot.Configuration.Builder
                 _fileCacheOptions, 
                 _downstreamScheme, 
                 _loadBalancer,
-                _downstreamHost, 
-                _downstreamPort, 
-                _loadBalancerKey, 
-                _serviceProviderConfiguraion, 
+                _reRouteKey, 
                 _useQos, 
                 _qosOptions,
                 _enableRateLimiting,
                 _rateLimitOptions,
-                _httpHandlerOptions);
+                _httpHandlerOptions,
+                _useServiceDiscovery,
+                _serviceName,
+                _upstreamHeaderFindAndReplace,
+                _downstreamHeaderFindAndReplace,
+                _downstreamAddresses,
+                _upstreamHost);
         }
     }
 }

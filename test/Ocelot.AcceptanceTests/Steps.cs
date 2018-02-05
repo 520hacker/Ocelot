@@ -23,6 +23,7 @@ using Ocelot.Middleware;
 using Ocelot.ServiceDiscovery;
 using Shouldly;
 using ConfigurationBuilder = Microsoft.Extensions.Configuration.ConfigurationBuilder;
+using Ocelot.AcceptanceTests.Caching;
 
 namespace Ocelot.AcceptanceTests
 {
@@ -74,15 +75,15 @@ namespace Ocelot.AcceptanceTests
         /// </summary>
         public void GivenOcelotIsRunning()
         {
-             _webHostBuilder = new WebHostBuilder();
-            
-            _webHostBuilder.ConfigureServices(s => 
+            _webHostBuilder = new WebHostBuilder();
+
+            _webHostBuilder.ConfigureServices(s =>
             {
                 s.AddSingleton(_webHostBuilder);
             });
 
             _ocelotServer = new TestServer(_webHostBuilder
-                .UseStartup<Startup>());
+                .UseStartup<AcceptanceTestsStartup>());
 
             _ocelotClient = _ocelotServer.CreateClient();
         }
@@ -102,45 +103,84 @@ namespace Ocelot.AcceptanceTests
             });
 
             _ocelotServer = new TestServer(_webHostBuilder
-                .UseStartup<Startup>());
+                .UseStartup<AcceptanceTestsStartup>());
 
             _ocelotClient = _ocelotServer.CreateClient();
         }
 
-        public void GivenOcelotIsRunningUsingConsulToStoreConfig(ConsulRegistryConfiguration consulConfig)
+        public void ThenTheResponseHeaderIs(string key, string value)
+        {
+            var header = _response.Headers.GetValues(key);
+            header.First().ShouldBe(value);
+        }
+
+        public void GivenOcelotIsRunningUsingJsonSerializedCache()
         {
             _webHostBuilder = new WebHostBuilder();
 
             _webHostBuilder.ConfigureServices(s =>
             {
                 s.AddSingleton(_webHostBuilder);
-                s.AddOcelotStoreConfigurationInConsul(consulConfig);
             });
 
             _ocelotServer = new TestServer(_webHostBuilder
-                .UseStartup<Startup>());
+                .UseStartup<StartupWithCustomCacheHandle>());
 
             _ocelotClient = _ocelotServer.CreateClient();
         }
 
-        internal void ThenTheResponseShouldBe(FileConfiguration expected)
+        public void GivenOcelotIsRunningUsingConsulToStoreConfig()
+        {
+            _webHostBuilder = new WebHostBuilder();
+
+            _webHostBuilder.ConfigureServices(s =>
+            {
+                s.AddSingleton(_webHostBuilder);
+            });
+
+            _ocelotServer = new TestServer(_webHostBuilder
+                .UseStartup<ConsulStartup>());
+
+            _ocelotClient = _ocelotServer.CreateClient();
+        }
+
+        public void GivenOcelotIsRunningUsingConsulToStoreConfigAndJsonSerializedCache()
+        {
+            _webHostBuilder = new WebHostBuilder();
+
+            _webHostBuilder.ConfigureServices(s =>
+            {
+                s.AddSingleton(_webHostBuilder);
+            });
+
+            _ocelotServer = new TestServer(_webHostBuilder
+                .UseStartup<StartupWithConsulAndCustomCacheHandle>());
+
+            _ocelotClient = _ocelotServer.CreateClient();
+        }
+
+        internal void ThenTheResponseShouldBe(FileConfiguration expecteds)
         {
             var response = JsonConvert.DeserializeObject<FileConfiguration>(_response.Content.ReadAsStringAsync().Result);
-            
-            response.GlobalConfiguration.AdministrationPath.ShouldBe(expected.GlobalConfiguration.AdministrationPath);
-            response.GlobalConfiguration.RequestIdKey.ShouldBe(expected.GlobalConfiguration.RequestIdKey);
-            response.GlobalConfiguration.ServiceDiscoveryProvider.Host.ShouldBe(expected.GlobalConfiguration.ServiceDiscoveryProvider.Host);
-            response.GlobalConfiguration.ServiceDiscoveryProvider.Port.ShouldBe(expected.GlobalConfiguration.ServiceDiscoveryProvider.Port);
-            response.GlobalConfiguration.ServiceDiscoveryProvider.Provider.ShouldBe(expected.GlobalConfiguration.ServiceDiscoveryProvider.Provider);
 
-            for(var i = 0; i < response.ReRoutes.Count; i++)
+            response.GlobalConfiguration.RequestIdKey.ShouldBe(expecteds.GlobalConfiguration.RequestIdKey);
+            response.GlobalConfiguration.ServiceDiscoveryProvider.Host.ShouldBe(expecteds.GlobalConfiguration.ServiceDiscoveryProvider.Host);
+            response.GlobalConfiguration.ServiceDiscoveryProvider.Port.ShouldBe(expecteds.GlobalConfiguration.ServiceDiscoveryProvider.Port);
+
+            for (var i = 0; i < response.ReRoutes.Count; i++)
             {
-                response.ReRoutes[i].DownstreamHost.ShouldBe(expected.ReRoutes[i].DownstreamHost);
-                response.ReRoutes[i].DownstreamPathTemplate.ShouldBe(expected.ReRoutes[i].DownstreamPathTemplate);
-                response.ReRoutes[i].DownstreamPort.ShouldBe(expected.ReRoutes[i].DownstreamPort);
-                response.ReRoutes[i].DownstreamScheme.ShouldBe(expected.ReRoutes[i].DownstreamScheme);
-                response.ReRoutes[i].UpstreamPathTemplate.ShouldBe(expected.ReRoutes[i].UpstreamPathTemplate);
-                response.ReRoutes[i].UpstreamHttpMethod.ShouldBe(expected.ReRoutes[i].UpstreamHttpMethod);
+                for (var j = 0; j < response.ReRoutes[i].DownstreamHostAndPorts.Count; j++)
+                {
+                    var result = response.ReRoutes[i].DownstreamHostAndPorts[j];
+                    var expected = expecteds.ReRoutes[i].DownstreamHostAndPorts[j];
+                    result.Host.ShouldBe(expected.Host);
+                    result.Port.ShouldBe(expected.Port);
+                }
+
+                response.ReRoutes[i].DownstreamPathTemplate.ShouldBe(expecteds.ReRoutes[i].DownstreamPathTemplate);
+                response.ReRoutes[i].DownstreamScheme.ShouldBe(expecteds.ReRoutes[i].DownstreamScheme);
+                response.ReRoutes[i].UpstreamPathTemplate.ShouldBe(expecteds.ReRoutes[i].UpstreamPathTemplate);
+                response.ReRoutes[i].UpstreamHttpMethod.ShouldBe(expecteds.ReRoutes[i].UpstreamHttpMethod);
             }
         }
 
@@ -157,7 +197,7 @@ namespace Ocelot.AcceptanceTests
 
             var configuration = builder.Build();
             _webHostBuilder = new WebHostBuilder();
-            _webHostBuilder.ConfigureServices(s => 
+            _webHostBuilder.ConfigureServices(s =>
             {
                 s.AddSingleton(_webHostBuilder);
             });
@@ -174,8 +214,8 @@ namespace Ocelot.AcceptanceTests
                         })
                         .WithDictionaryHandle();
                     };
-                    
-                    s.AddOcelot(configuration, settings);
+
+                    s.AddOcelot(configuration);
                 })
                 .ConfigureLogging(l =>
                 {
@@ -298,15 +338,20 @@ namespace Ocelot.AcceptanceTests
             _response = _ocelotClient.GetAsync(url).Result;
         }
 
+        public void GivenIAddAHeader(string key, string value)
+        {
+            _ocelotClient.DefaultRequestHeaders.Add(key, value);
+        }
+
         public void WhenIGetUrlOnTheApiGatewayMultipleTimes(string url, int times)
         {
             var tasks = new Task[times];
-            
+
             for (int i = 0; i < times; i++)
             {
                 var urlCopy = url;
                 tasks[i] = GetForServiceDiscoveryTest(urlCopy);
-                Thread.Sleep(_random.Next(40,60));
+                Thread.Sleep(_random.Next(40, 60));
             }
 
             Task.WaitAll(tasks);
@@ -329,7 +374,7 @@ namespace Ocelot.AcceptanceTests
                 request.Headers.Add("ClientId", clientId);
                 _response = _ocelotClient.SendAsync(request).Result;
             }
-        } 
+        }
 
         public void WhenIGetUrlOnTheApiGateway(string url, string requestId)
         {
@@ -379,44 +424,6 @@ namespace Ocelot.AcceptanceTests
         public void ThenTheRequestIdIsReturned(string expected)
         {
             _response.Headers.GetValues(RequestIdKey).First().ShouldBe(expected);
-        }
-    }
-
-    public class Startup
-    {
-        public Startup(IHostingEnvironment env)
-        {
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(env.ContentRootPath)
-                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true)
-                .AddJsonFile("configuration.json")
-                .AddEnvironmentVariables();
-
-            Configuration = builder.Build();
-        }
-
-        public IConfigurationRoot Configuration { get; }
-
-        public void ConfigureServices(IServiceCollection services)
-        {
-            Action<ConfigurationBuilderCachePart> settings = (x) =>
-            {
-                x.WithMicrosoftLogging(log =>
-                    {
-                        log.AddConsole(LogLevel.Debug);
-                    })
-                    .WithDictionaryHandle();
-            };
-
-            services.AddOcelot(Configuration, settings);
-        }
-
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
-        {
-            loggerFactory.AddConsole(Configuration.GetSection("Logging"));
-
-            app.UseOcelot().Wait();
         }
     }
 }

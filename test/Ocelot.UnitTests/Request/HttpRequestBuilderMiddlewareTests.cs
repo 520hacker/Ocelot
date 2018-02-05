@@ -47,7 +47,7 @@
         public void should_call_scoped_data_repository_correctly()
         {
 
-            var downstreamRoute = new DownstreamRoute(new List<UrlPathPlaceholderNameAndValue>(),
+            var downstreamRoute = new DownstreamRoute(new List<PlaceholderNameAndValue>(),
                 new ReRouteBuilder()
                     .WithRequestIdKey("LSRequestId")
                     .WithUpstreamHttpMethod(new List<string> { "Get" })
@@ -88,7 +88,7 @@
         private void GivenTheQosProviderHouseReturns(Response<IQoSProvider> qosProvider)
         {
             _qosProviderHouse
-                .Setup(x => x.Get(It.IsAny<string>()))
+                .Setup(x => x.Get(It.IsAny<ReRoute>()))
                 .Returns(qosProvider);
         }
 

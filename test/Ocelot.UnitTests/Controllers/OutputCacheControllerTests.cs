@@ -1,10 +1,9 @@
 using Xunit;
 using Shouldly;
 using TestStack.BDDfy;
-using Ocelot.Controllers;
+using Ocelot.Cache;
 using System;
 using Moq;
-using Ocelot.Cache;
 using System.Net.Http;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
@@ -14,12 +13,12 @@ namespace Ocelot.UnitTests.Controllers
     public class OutputCacheControllerTests
     {
         private OutputCacheController _controller;
-        private Mock<IOcelotCache<HttpResponseMessage>> _cache;
+        private Mock<IOcelotCache<CachedResponse>> _cache;
         private IActionResult _result;
 
         public OutputCacheControllerTests()
         {
-            _cache = new Mock<IOcelotCache<HttpResponseMessage>>();
+            _cache = new Mock<IOcelotCache<CachedResponse>>();
             _controller = new OutputCacheController(_cache.Object);
         }
 
