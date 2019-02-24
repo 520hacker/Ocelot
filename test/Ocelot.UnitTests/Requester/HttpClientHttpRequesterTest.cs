@@ -28,6 +28,7 @@ namespace Ocelot.UnitTests.Requester
         private Mock<IOcelotLoggerFactory> _loggerFactory;
         private Mock<IOcelotLogger> _logger;
         private Mock<IExceptionToErrorMapper> _mapper;
+        private Mock<IHttpClientFactory> _httpClientFactory;
 
         public HttpClientHttpRequesterTest()
         {
@@ -40,11 +41,15 @@ namespace Ocelot.UnitTests.Requester
                 .Returns(_logger.Object);
             _cacheHandlers = new Mock<IHttpClientCache>();
             _mapper = new Mock<IExceptionToErrorMapper>();
+
+            _httpClientFactory = new Mock<IHttpClientFactory>();
+
             _httpClientRequester = new HttpClientHttpRequester(
                 _loggerFactory.Object, 
                 _cacheHandlers.Object, 
                 _factory.Object,
-                _mapper.Object);            
+                _mapper.Object,
+                _httpClientFactory.Object);            
         }
 
         [Fact]

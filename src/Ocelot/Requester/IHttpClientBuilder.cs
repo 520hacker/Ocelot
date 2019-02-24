@@ -1,10 +1,12 @@
 ﻿using Ocelot.Middleware;
+using System.Net.Http;
 
 namespace Ocelot.Requester
 {
     public interface IHttpClientBuilder
     {
-        IHttpClient Create(DownstreamContext request);
+        HttpClient Create(DownstreamContext request);
+
         void Save();
     }
 }

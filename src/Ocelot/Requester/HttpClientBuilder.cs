@@ -2,26 +2,34 @@
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Options;
 using Ocelot.Configuration;
 using Ocelot.Logging;
 using Ocelot.Middleware;
 
 namespace Ocelot.Requester
 {
-    public class HttpClientBuilder : IHttpClientBuilder
+    public class HttpClientBuilder : IHttpClientBuilder, Microsoft.Extensions.DependencyInjection.IHttpClientBuilder
     {
         private readonly IDelegatingHandlerHandlerFactory _factory;
         private readonly IHttpClientCache _cacheHandlers;
         private readonly IOcelotLogger _logger;
-        private DownstreamReRoute _cacheKey;
+        private string _cacheKey;
         private HttpClient _httpClient;
-        private IHttpClient _client;
         private readonly TimeSpan _defaultTimeout;
+        private readonly IHttpClientFactory _httpClientFactory;
+
+        public string Name { get; private set; } = Options.DefaultName;
+
+        public IServiceCollection Services { get; }
 
         public HttpClientBuilder(
             IDelegatingHandlerHandlerFactory factory, 
             IHttpClientCache cacheHandlers, 
-            IOcelotLogger logger)
+            IOcelotLogger logger,
+            IHttpClientFactory httpClientFactory)
         {
             _factory = factory;
             _cacheHandlers = cacheHandlers;
@@ -30,17 +38,20 @@ namespace Ocelot.Requester
             // This is hardcoded at the moment but can easily be added to configuration
             // if required by a user request.
             _defaultTimeout = TimeSpan.FromSeconds(90);
+
+            _httpClientFactory = httpClientFactory;
+
+            Services = new ServiceCollection();
         }
 
-        public IHttpClient Create(DownstreamContext context)
+        public HttpClient Create(DownstreamContext context)
         {
-            _cacheKey = context.DownstreamReRoute;
+            _cacheKey = GetCacheKey(context);
 
             var httpClient = _cacheHandlers.Get(_cacheKey);
 
             if (httpClient != null)
             {
-                _client = httpClient;
                 return httpClient;
             }
 
@@ -58,14 +69,23 @@ namespace Ocelot.Requester
                 ? _defaultTimeout 
                 : TimeSpan.FromMilliseconds(context.DownstreamReRoute.QosOptions.TimeoutValue);
 
-            _httpClient = new HttpClient(CreateHttpMessageHandler(handler, context.DownstreamReRoute))
+            if (!string.IsNullOrEmpty(context.DownstreamReRoute.ServiceName))
             {
-                Timeout = timeout
-            };
+                Name = context.DownstreamReRoute.ServiceName;
+            }
 
-            _client = new HttpClientWrapper(_httpClient);
+            Services.Configure<HttpClientFactoryOptions>(
+                Name,
+                options => options.HttpMessageHandlerBuilderActions.Add(builder =>
+                {
+                    builder.PrimaryHandler = CreateHttpMessageHandler(handler, context.DownstreamReRoute);
+                    builder.Build();
+                }));
 
-            return _client;
+            _httpClient = _httpClientFactory.CreateClient(Name);
+            _httpClient.Timeout = timeout;
+
+            return _httpClient;
         }
 
         private HttpClientHandler CreateHandler(DownstreamContext context)
@@ -107,7 +127,7 @@ namespace Ocelot.Requester
 
         public void Save()
         {
-            _cacheHandlers.Set(_cacheKey, _client, TimeSpan.FromHours(24));
+            _cacheHandlers.Set(_cacheKey, _httpClient, TimeSpan.FromHours(24));
         }
 
         private HttpMessageHandler CreateHttpMessageHandler(HttpMessageHandler httpMessageHandler, DownstreamReRoute request)
@@ -126,6 +146,15 @@ namespace Ocelot.Requester
                     httpMessageHandler = delegatingHandler;
                 });
             return httpMessageHandler;
+        }
+
+        private string GetCacheKey(DownstreamContext request)
+        {
+            var cacheKey = $"{request.DownstreamRequest.Method}:{request.DownstreamRequest.OriginalString}";
+
+            this._logger.LogDebug($"Cache key for request is {cacheKey}");
+
+            return cacheKey;
         }
     }
 }

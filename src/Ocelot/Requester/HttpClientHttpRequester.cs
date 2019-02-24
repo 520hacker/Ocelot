@@ -13,21 +13,24 @@ namespace Ocelot.Requester
         private readonly IOcelotLogger _logger;
         private readonly IDelegatingHandlerHandlerFactory _factory;
         private readonly IExceptionToErrorMapper _mapper;
+        private readonly IHttpClientFactory _clientFactory;
 
         public HttpClientHttpRequester(IOcelotLoggerFactory loggerFactory,
             IHttpClientCache cacheHandlers,
             IDelegatingHandlerHandlerFactory factory, 
-            IExceptionToErrorMapper mapper)
+            IExceptionToErrorMapper mapper,
+            IHttpClientFactory clientFactory)
         {
             _logger = loggerFactory.CreateLogger<HttpClientHttpRequester>();
             _cacheHandlers = cacheHandlers;
             _factory = factory;
             _mapper = mapper;
+            _clientFactory = clientFactory;
         }
 
         public async Task<Response<HttpResponseMessage>> GetResponse(DownstreamContext context)
         {
-            var builder = new HttpClientBuilder(_factory, _cacheHandlers, _logger);
+            var builder = new HttpClientBuilder(_factory, _cacheHandlers, _logger, _clientFactory);
 
             var httpClient = builder.Create(context);
 

@@ -25,15 +25,16 @@ namespace Ocelot.UnitTests.Requester
     {
         private HttpClientBuilder _builder;
         private readonly Mock<IDelegatingHandlerHandlerFactory> _factory;
-        private IHttpClient _httpClient;
+        private readonly Mock<IHttpClientFactory> _httpClientFactory;
+        private HttpClient _httpClient;
         private HttpResponseMessage _response;
         private DownstreamContext _context;
         private readonly Mock<IHttpClientCache> _cacheHandlers;
         private readonly Mock<IOcelotLogger> _logger;
         private int _count;
         private IWebHost _host;
-        private IHttpClient _againHttpClient;
-        private IHttpClient _firstHttpClient;
+        private HttpClient _againHttpClient;
+        private HttpClient _firstHttpClient;
         private MemoryHttpClientCache _realCache;
 
         public HttpClientBuilderTests()
@@ -41,7 +42,9 @@ namespace Ocelot.UnitTests.Requester
             _cacheHandlers = new Mock<IHttpClientCache>();
             _logger = new Mock<IOcelotLogger>();
             _factory = new Mock<IDelegatingHandlerHandlerFactory>();
-            _builder = new HttpClientBuilder(_factory.Object, _cacheHandlers.Object, _logger.Object);
+            _httpClientFactory = new Mock<IHttpClientFactory>();
+
+            _builder = new HttpClientBuilder(_factory.Object, _cacheHandlers.Object, _logger.Object, _httpClientFactory.Object);
         }
 
         [Fact]
@@ -243,33 +246,33 @@ namespace Ocelot.UnitTests.Requester
         [InlineData("PATCH")]
         public void should_add_verb_to_cache_key(string verb)
         {
-            var downstreamUrl = "http://localhost:5012/";
+            var client = "http://localhost:5012";
 
-            var method = new HttpMethod(verb);
+            HttpMethod method = new HttpMethod(verb);
 
             var qosOptions = new QoSOptionsBuilder()
                 .Build();
 
             var reRoute = new DownstreamReRouteBuilder()
                 .WithQosOptions(qosOptions)
-                .WithHttpHandlerOptions(new HttpHandlerOptions(false, false, false, true))
+                .WithHttpHandlerOptions(new HttpHandlerOptions(false, false, false,true))
                 .WithLoadBalancerKey("")
-                .WithUpstreamPathTemplate(new UpstreamPathTemplateBuilder().WithOriginalValue("").Build())
                 .WithQosOptions(new QoSOptionsBuilder().Build())
                 .Build();
 
             this.Given(_ => GivenADownstreamService())
-                .And(_ => GivenARequestWithAUrlAndMethod(reRoute, downstreamUrl, method))
+                .And(_ => GivenARequestWithAUrlAndMethod(reRoute, client, method))
                 .And(_ => GivenTheFactoryReturnsNothing())
                 .And(_ => WhenIBuild())
-                .And(_ => GivenCacheIsCalledWithExpectedKey($"{method.ToString()}:{downstreamUrl}"))
+                .And(_ => GivenCacheIsCalledWithExpectedKey($"{method.ToString()}:{client}"))
                 .BDDfy();
+
         }
 
         private void GivenARealCache()
         {
             _realCache = new MemoryHttpClientCache();
-            _builder = new HttpClientBuilder(_factory.Object, _realCache, _logger.Object);
+            _builder = new HttpClientBuilder(_factory.Object, _realCache, _logger.Object, _httpClientFactory.Object);
         }
 
         private void ThenTheHttpClientIsFromTheCache()
@@ -289,7 +292,7 @@ namespace Ocelot.UnitTests.Requester
 
         private void GivenCacheIsCalledWithExpectedKey(string expectedKey)
         {
-            _cacheHandlers.Verify(x => x.Get(It.IsAny<DownstreamReRoute>()), Times.Once);
+            this._cacheHandlers.Verify(x => x.Get(It.Is<string>(p => p.Equals(expectedKey, StringComparison.OrdinalIgnoreCase))), Times.Once);
         }
 
         private void ThenTheDangerousAcceptAnyServerCertificateValidatorWarningIsLogged()
@@ -299,7 +302,7 @@ namespace Ocelot.UnitTests.Requester
 
         private void GivenTheClientIsCached()
         {
-            _cacheHandlers.Setup(x => x.Get(It.IsAny<DownstreamReRoute>())).Returns(_httpClient);
+            _cacheHandlers.Setup(x => x.Get(It.IsAny<string>())).Returns(_httpClient);
         }
 
         private void ThenTheCookieIsSet()
@@ -431,7 +434,7 @@ namespace Ocelot.UnitTests.Requester
 
         private void WhenIBuildAgain()
         {
-            _builder = new HttpClientBuilder(_factory.Object, _realCache, _logger.Object);
+            _builder = new HttpClientBuilder(_factory.Object, _realCache, _logger.Object,_httpClientFactory.Object);
             _againHttpClient = _builder.Create(_context);
         }
 
