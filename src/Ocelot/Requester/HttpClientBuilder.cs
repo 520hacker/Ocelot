@@ -13,6 +13,7 @@ namespace Ocelot.Requester
 {
     public class HttpClientBuilder : IHttpClientBuilder, Microsoft.Extensions.DependencyInjection.IHttpClientBuilder
     {
+
         private readonly IDelegatingHandlerHandlerFactory _factory;
         private readonly IHttpClientCache _cacheHandlers;
         private readonly IOcelotLogger _logger;
