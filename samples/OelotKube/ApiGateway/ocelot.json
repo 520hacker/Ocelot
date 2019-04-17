@@ -5,7 +5,7 @@
       "DownstreamScheme": "http",
       "UpstreamPathTemplate": "/values",
       "ServiceName": "downstreamservice",
-      "UpstreamHttpMethod": [ "Get" ]      
+      "UpstreamHttpMethod": [ "Get" ,"Post"]      
     }
   ],
   "GlobalConfiguration": {

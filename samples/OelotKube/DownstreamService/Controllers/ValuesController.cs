@@ -10,11 +10,23 @@ namespace DownstreamService.Controllers
     [ApiController]
     public class ValuesController : ControllerBase
     {
+        private static Contador _CONTADOR = new Contador();
+
         // GET api/values
         [HttpGet]
-        public ActionResult<IEnumerable<string>> Get()
+        public object Get()
         {
-            return new string[] { "value1", "value2" };
+            lock (_CONTADOR)
+            {
+                _CONTADOR.Incrementar();
+
+                return new
+                {
+                    _CONTADOR.ValorAtual,
+                    Environment.MachineName,
+                    Sistema = Environment.OSVersion.VersionString
+                };
+            }
         }
 
         // GET api/values/5
